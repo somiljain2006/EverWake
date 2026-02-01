@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SplashView: View {
+    let onFinished: () -> Void
     @State private var eyeOpacity: Double = 0.0
     @State private var eyeSize: CGFloat = 120
     
@@ -105,6 +106,12 @@ struct SplashView: View {
                     withAnimation(.easeOut(duration: 0.5)) {
                         taglineOpacity = 1.0
                         taglineOffsetY = 0
+                    }
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                    withAnimation(.easeInOut) {
+                        onFinished()
                     }
                 }
             }

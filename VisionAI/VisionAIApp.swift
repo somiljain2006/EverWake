@@ -11,7 +11,7 @@ import SwiftUI
 struct VisionAIApp: App {
     var body: some Scene {
         WindowGroup {
-            SplashView()
+            RootView()
         }
     }
 }
