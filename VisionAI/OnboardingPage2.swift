@@ -12,7 +12,6 @@ struct OnboardingPage2: View {
             bgColor.ignoresSafeArea()
 
             VStack {
-                // Skip
                 HStack {
                     Spacer()
                     Button("Skip") {
