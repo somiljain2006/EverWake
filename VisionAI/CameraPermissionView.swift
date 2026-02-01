@@ -2,6 +2,9 @@ import SwiftUI
 import AVFoundation
 
 struct CameraPermissionView: View {
+    
+    @State private var showNotifications = false
+    @State private var isRequesting = false
 
     private let bgColor = Color(hex: "#2D3135")
     private let headingColor = Color(hex: "#C37CAB")
@@ -9,6 +12,16 @@ struct CameraPermissionView: View {
     private let subtitleColor = Color(hex: "#C37CAB")
 
     var body: some View {
+        if showNotifications {
+            NotificationPermissionView()
+                .transition(.opacity)
+        } else {
+            cameraView
+                .transition(.opacity)
+        }
+    }
+
+    private var cameraView: some View {
         ZStack {
             bgColor.ignoresSafeArea()
 
@@ -46,6 +59,7 @@ struct CameraPermissionView: View {
                 Spacer()
 
                 Button {
+                    isRequesting = true
                     requestCameraPermission()
                 } label: {
                     Text("Allow")
@@ -56,11 +70,20 @@ struct CameraPermissionView: View {
                         .background(buttonColor)
                         .cornerRadius(14)
                 }
+                .disabled(isRequesting)
+                .opacity(isRequesting ? 0.6 : 1)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 32)
             }
         }
+        
+        .onAppear {
+            if AVCaptureDevice.authorizationStatus(for: .video) == .authorized {
+                showNotifications = true
+            }
+        }
     }
+
 
     private func requestCameraPermission() {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
@@ -70,17 +93,24 @@ struct CameraPermissionView: View {
             AVCaptureDevice.requestAccess(for: .video) { granted in
                 DispatchQueue.main.async {
                     if granted {
-                        print("Camera permission granted")
+                        isRequesting = false
+                        withAnimation {
+                            showNotifications = true
+                        }
                     } else {
-                        print("Camera permission denied")
+                        isRequesting = false
                     }
                 }
             }
 
         case .authorized:
-            print("Camera already authorized")
+            isRequesting = false
+            withAnimation {
+                showNotifications = true
+            }
 
         case .denied, .restricted:
+            isRequesting = false
             DispatchQueue.main.async {
                 openAppSettings()
             }
