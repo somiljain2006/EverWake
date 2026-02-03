@@ -1,29 +1,33 @@
 import SwiftUI
 
 struct RootView: View {
-    @State private var showOnboarding = false
-    @State private var showPermission = false
+
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @State private var flow: AppFlow = .splash
 
     var body: some View {
         ZStack {
-            if showPermission {
-                CameraPermissionView()
-                    .transition(.opacity)
-            } else if showOnboarding {
-                OnboardingContainer(
-                    onFinish: {
-                        showPermission = true
-                    }
-                )
-                .transition(.opacity)
-            } else {
+            switch flow {
+
+            case .splash:
                 SplashView {
-                    showOnboarding = true
+                    withAnimation {
+                        flow = hasSeenOnboarding ? .permissions : .onboarding
+                    }
                 }
-                .transition(.opacity)
+
+            case .onboarding:
+                OnboardingContainer {
+                    hasSeenOnboarding = true
+                    withAnimation {
+                        flow = .permissions
+                    }
+                }
+
+            case .permissions:
+                CameraPermissionView()
             }
         }
-        .animation(.easeInOut(duration: 0.35), value: showPermission)
+        .animation(.easeInOut(duration: 0.35), value: flow)
     }
 }
-

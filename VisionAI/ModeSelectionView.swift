@@ -8,63 +8,81 @@ struct ModeSelectionView: View {
 
     private let imageColumnWidth: CGFloat = 140
 
+    @State private var goToDriverMode = false
+    @State private var goToStudyMode = false
+
     var body: some View {
-        ZStack {
-            bgColor.ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                bgColor.ignoresSafeArea()
 
-            VStack(spacing: 28) {
+                VStack(spacing: 28) {
 
-                Spacer(minLength: 40)
+                    Spacer(minLength: 40)
 
-                Text("What do you want to do now?")
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
+                    Text("What do you want to do now?")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
 
-                modeCard(
-                    imageView:
-                        ZStack {
+                    modeCard(
+                        imageView:
                             Image("driver_car")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: imageColumnWidth * 0.7, height: imageColumnWidth * 0.7)
-                                .offset(y: -5)
-                        },
-                    title: "Stay alert while\ndriving",
-                    points: [
-                        "Real-time alerts",
-                        "Eye detection",
-                        "Safety-first"
-                    ],
-                    buttonTitle: "Driver Mode",
-                    action: {
-                        print("Driver Mode Selected")
-                    }
-                )
+                                .frame(
+                                    width: imageColumnWidth * 0.7,
+                                    height: imageColumnWidth * 0.7
+                                )
+                                .offset(y: -5),
+                        title: "Stay alert while\ndriving",
+                        points: [
+                            "Real-time alerts",
+                            "Eye detection",
+                            "Safety-first"
+                        ],
+                        buttonTitle: "Driver Mode",
+                        action: {
+                            goToDriverMode = true
+                        }
+                    )
 
-                modeCard(
-                    imageView:
-                        Image("study")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: imageColumnWidth * 1.1, height: imageColumnWidth * 1.1)
-                            .offset(y: 8)
-                            .clipped(),
-                    title: "Stay focused while\nstudying",
-                    points: [
-                        "Real-time movement",
-                        "Laziness detection",
-                        "Safety-first"
-                    ],
-                    buttonTitle: "Study Mode",
-                    action: {
-                        print("Study Mode Selected")
-                    }
-                )
+                    modeCard(
+                        imageView:
+                            Image("study")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(
+                                    width: imageColumnWidth * 1.1,
+                                    height: imageColumnWidth * 1.1
+                                )
+                                .offset(y: 8),
+                        title: "Stay focused while\nstudying",
+                        points: [
+                            "Real-time movement",
+                            "Laziness detection",
+                            "Safety-first"
+                        ],
+                        buttonTitle: "Study Mode",
+                        action: {
+                            goToStudyMode = true
+                        }
+                    )
 
-                Spacer()
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
+
+            .navigationDestination(isPresented: $goToDriverMode) {
+                DriverDetectionView()
+            }
+            .navigationDestination(isPresented: $goToStudyMode) {
+                Text("Study Mode Coming Soon")
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(bgColor)
+            }
         }
     }
 
@@ -79,11 +97,12 @@ struct ModeSelectionView: View {
         VStack(spacing: 16) {
             HStack(alignment: .center, spacing: 16) {
 
-                VStack {
-                    imageView
-                        .frame(width: imageColumnWidth, height: imageColumnWidth, alignment: .center)
-                }
-                .frame(width: imageColumnWidth, alignment: .center)
+                imageView
+                    .frame(
+                        width: imageColumnWidth,
+                        height: imageColumnWidth,
+                        alignment: .center
+                    )
 
                 VStack(alignment: .leading, spacing: 8) {
 
@@ -91,7 +110,6 @@ struct ModeSelectionView: View {
                         .font(.system(size: 21, weight: .semibold))
                         .foregroundColor(accentColor)
                         .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
                         .fixedSize(horizontal: false, vertical: true)
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -104,7 +122,7 @@ struct ModeSelectionView: View {
                     .padding(.top, 12)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 15)
+                .padding(.trailing, 12)
             }
 
             Button(action: action) {

@@ -5,8 +5,8 @@ struct OnboardingPage1: View {
     let onFinish: () -> Void
 
     private let bgColor = Color(hex: "#2D3135")
-    private let subtitleColor = Color(white: 0.85)
-    private let accentLightBlue = Color(red: 133/255, green: 199/255, blue: 216/255)
+    private let subtitleColor = Color(hex: "#D9D9D9")
+    private let accentLightBlue = Color(hex: "#85C7D8")
     private let skipColor = Color(hex: "#51ADC7")
 
     var body: some View {

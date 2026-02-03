@@ -19,8 +19,8 @@ struct SplashView: View {
             return AnyShapeStyle(
                 LinearGradient(
                     gradient: Gradient(stops: [
-                        .init(color: Color(red: 76/255, green: 142/255, blue: 194/255), location: 0.1107),
-                        .init(color: Color(red: 74/255, green: 173/255, blue: 195/255), location: 0.7283)
+                        .init(color: Color(red: 76.0/255.0, green: 142.0/255.0, blue: 194.0/255.0), location: 0.1107),
+                        .init(color: Color(red: 74.0/255.0, green: 173.0/255.0, blue: 195.0/255.0), location: 0.7283)
                     ]),
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -38,7 +38,6 @@ struct SplashView: View {
 
                 HStack(spacing: moveEyeToLeft ? -18 : 0) {
                     
-                    // Eye logo
                     Image("eye_logo")
                         .resizable()
                         .scaledToFit()
