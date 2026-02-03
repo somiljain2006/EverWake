@@ -5,6 +5,8 @@ struct NotificationPermissionView: View {
     
     @State private var showModeSelection = false
     @State private var isRequesting = false
+    
+    @AppStorage("isSetupComplete") private var isSetupComplete = false
 
     private let bgColor = Color(hex: "#2D3135")
     private let accentColor = Color(hex: "#C37CAB")
@@ -83,7 +85,7 @@ struct NotificationPermissionView: View {
                     DispatchQueue.main.async {
                         if settings.authorizationStatus == .authorized ||
                            settings.authorizationStatus == .provisional {
-                            showModeSelection = true
+                            finishSetup()
                         }
                     }
                 }
@@ -104,6 +106,7 @@ struct NotificationPermissionView: View {
                         DispatchQueue.main.async {
                             if granted {
                                 isRequesting = false
+                                finishSetup()
                                 withAnimation {
                                     showModeSelection = true
                                 }
@@ -116,6 +119,12 @@ struct NotificationPermissionView: View {
                 }
             }
         }
+    }
+    private func finishSetup() {
+            isSetupComplete = true
+            withAnimation {
+                showModeSelection = true
+            }
     }
 }
 

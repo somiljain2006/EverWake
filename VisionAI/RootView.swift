@@ -3,6 +3,8 @@ import SwiftUI
 struct RootView: View {
 
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @AppStorage("isSetupComplete") private var isSetupComplete = false
+    
     @State private var flow: AppFlow = .splash
 
     var body: some View {
@@ -12,7 +14,13 @@ struct RootView: View {
             case .splash:
                 SplashView {
                     withAnimation {
-                        flow = hasSeenOnboarding ? .permissions : .onboarding
+                        if isSetupComplete {
+                            flow = .modeSelection
+                        } else if hasSeenOnboarding {
+                            flow = .permissions
+                        } else {
+                            flow = .onboarding
+                        }
                     }
                 }
 
@@ -26,6 +34,9 @@ struct RootView: View {
 
             case .permissions:
                 CameraPermissionView()
+
+            case .modeSelection:
+                ModeSelectionView()
             }
         }
         .animation(.easeInOut(duration: 0.35), value: flow)
