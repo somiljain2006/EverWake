@@ -6,6 +6,7 @@ struct DriverProfileView: View {
     
     @State private var showReportDialog = false
     @State private var showCopiedToast = false
+    @State private var showShareSheet = false
 
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("userEmail") private var userEmail: String = ""
@@ -102,8 +103,16 @@ struct DriverProfileView: View {
                 profileRow(title: "Report Issue", systemImage: "ladybug.fill")
             }
             .buttonStyle(PlainButtonStyle())
-            profileRow(title: "Send Feedback", systemImage: "text.bubble.fill")
-            profileRow(title: "Share App", systemImage: "square.and.arrow.up")
+
+            Button {
+                showShareSheet = true
+            } label: {
+                profileRow(title: "Share App", systemImage: "square.and.arrow.up")
+            }
+            .buttonStyle(PlainButtonStyle())
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: shareItems)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -244,6 +253,13 @@ struct DriverProfileView: View {
             }
         }
     }
+    
+    private var shareItems: [Any] {
+        let message = "Check out VisionAI – Stay awake, stay focused"
+        let appLink = URL(string: "https://github.com/somiljain2006/VisionAI")!
+        return [message, appLink]
+    }
+
 }
 
 struct DriverProfileView_Previews: PreviewProvider {
