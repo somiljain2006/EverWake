@@ -1,7 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct DriverProfileView: View {
     @Environment(\.dismiss) private var dismiss
+    
+    @State private var showReportDialog = false
+    @State private var showCopiedToast = false
 
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("userEmail") private var userEmail: String = ""
@@ -37,6 +41,10 @@ struct DriverProfileView: View {
                     .padding(.bottom, 28)
             }
             .foregroundColor(.white)
+            
+            if showReportDialog {
+                reportIssueDialog
+            }
         }
         .navigationBarBackButtonHidden(true)
     }
@@ -86,7 +94,14 @@ struct DriverProfileView: View {
 
     private var optionsList: some View {
         VStack(spacing: 20) {
-            profileRow(title: "Report Issue", systemImage: "ladybug.fill")
+            Button {
+                withAnimation(.easeInOut) {
+                    showReportDialog = true
+                }
+            } label: {
+                profileRow(title: "Report Issue", systemImage: "ladybug.fill")
+            }
+            .buttonStyle(PlainButtonStyle())
             profileRow(title: "Send Feedback", systemImage: "text.bubble.fill")
             profileRow(title: "Share App", systemImage: "square.and.arrow.up")
         }
@@ -128,6 +143,105 @@ struct DriverProfileView: View {
                 .background(accent)
                 .cornerRadius(14)
                 .shadow(radius: 6)
+        }
+    }
+    
+    private var reportIssueDialog: some View {
+        ZStack {
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation {
+                        showReportDialog = false
+                    }
+                }
+
+            VStack(spacing: 20) {
+                HStack {
+                    Text("Report Issue")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Button {
+                        withAnimation {
+                            showReportDialog = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+
+                HStack {
+                    Text(userEmail.isEmpty ? "email not provided" : userEmail)
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Button {
+                        copyEmailToClipboard()
+                    } label: {
+                        Image("copy")
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+                
+                if showCopiedToast {
+                    Text("Copied")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.mint)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                Button {
+                    withAnimation {
+                        showReportDialog = false
+                    }
+                } label: {
+                    Text("Continue")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Color(hex: "#49494A"))
+                        .cornerRadius(12)
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: 340)
+            .background(
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(Color(hex: "#2D3135"))
+            )
+            .shadow(radius: 20)
+            .transition(.scale.combined(with: .opacity))
+        }
+    }
+    
+    private func copyEmailToClipboard() {
+        guard !userEmail.isEmpty else { return }
+
+        UIPasteboard.general.string = userEmail
+
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+
+        withAnimation(.easeInOut) {
+            showCopiedToast = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeInOut) {
+                showCopiedToast = false
+            }
         }
     }
 }
