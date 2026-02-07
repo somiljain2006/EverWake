@@ -7,6 +7,7 @@ final class EyeDetector: NSObject, ObservableObject {
     @Published var isRunning: Bool = false
     @Published var eyesOpen: Bool = true
     @Published var closedDuration: TimeInterval = 0
+    @Published var isStarting: Bool = false
 
     var onEyesClosedLong: (() -> Void)?
     private let closedThreshold: TimeInterval = 5.0
@@ -32,6 +33,8 @@ final class EyeDetector: NSObject, ObservableObject {
     
     func start() {
         guard !isRunning else { return }
+        isStarting = true
+        isRunning = true
         checkPermissionAndStart()
     }
 
@@ -39,11 +42,12 @@ final class EyeDetector: NSObject, ObservableObject {
         lastClosedStart = nil
         closedDuration = 0
         eyesOpen = true
+        isStarting = false
+        isRunning = false
         if let session = session, session.isRunning {
             session.stopRunning()
         }
         session = nil
-        isRunning = false
     }
 
     private func checkPermissionAndStart() {
@@ -92,7 +96,7 @@ final class EyeDetector: NSObject, ObservableObject {
         if let conn = output.connection(with: .video) {
             if #available(iOS 17.0, *) {
                 if conn.isVideoRotationAngleSupported(0) {
-                    conn.videoRotationAngle = 0   // portrait
+                    conn.videoRotationAngle = 0
                 }
             } else {
                 if conn.isVideoOrientationSupported {
@@ -107,7 +111,7 @@ final class EyeDetector: NSObject, ObservableObject {
         videoQueue.async { [weak self] in
             self?.session?.startRunning()
             DispatchQueue.main.async {
-                self?.isRunning = true
+                self?.isStarting = false
             }
         }
     }
@@ -116,13 +120,11 @@ final class EyeDetector: NSObject, ObservableObject {
         DispatchQueue.main.async {
             self.eyesOpen = false
             
-            // start closed timer if needed
             if self.lastClosedStart == nil {
                 self.lastClosedStart = Date()
             } else {
                 self.closedDuration = Date().timeIntervalSince(self.lastClosedStart!)
                 
-                // If "no face" persists longer than threshold, trigger alarm
                 if self.closedDuration >= self.closedThreshold {
                     self.onEyesClosedLong?()
                 }
