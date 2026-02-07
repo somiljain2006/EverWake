@@ -10,158 +10,148 @@ struct DriverDetectionView: View {
     
     var body: some View {
         ZStack {
-            bgColor.ignoresSafeArea()
-            
-            if detector.isRunning && !detector.eyesOpen {
-                Color.red.opacity(0.3)
+            if detector.isRunning {
+                CameraPreview(session: detector.session)
                     .ignoresSafeArea()
-                    .animation(.easeInOut, value: detector.eyesOpen)
+            } else {
+                bgColor.ignoresSafeArea()
             }
-
+            
+            if detector.isRunning && detector.closedDuration > 5.0 {
+                Color.red.opacity(0.5)
+                    .ignoresSafeArea()
+                    .animation(.easeInOut(duration: 0.2), value: detector.closedDuration > 5.0)
+            }
+            
             VStack {
                 HStack {
-                    Spacer()
-                    Button {
-                        print("Profile tapped")
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.15))
-                            Image(systemName: "person.fill")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
-                                .foregroundColor(.white)
-                        }
-                        .frame(width: 44, height: 44)
-                    }
-                    .padding(.trailing, 20)
-                    .padding(.top, -50)
-                }
-
-                Spacer()
-                
-                ZStack {
-                    Image("camera-background")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 130, height: 130)
-                        .scaleEffect(1.3)
-                        .clipped()
-                    
                     if detector.isRunning {
-                        CameraPreview(session: detector.session)
-                            .scaledToFill()
-                            .frame(width: 130, height: 130)
-                            .id("CameraFeed")
-                    }
-
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.25),
-                                    Color.white.opacity(0.05)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 130, height: 130)
-
-                    Circle()
-                        .stroke(
-                            detector.isRunning
-                                ? (detector.eyesOpen ? Color.green : Color.red)
-                                : Color.white,
-                            lineWidth: 3
-                        )
-                        .frame(width: 130, height: 130)
-
-                    if !detector.isRunning {
-                        Image(systemName: "camera.fill")
+                        Image("eyes-wide")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 40, height: 40)
-                            .foregroundColor(.white)
-                            .shadow(radius: 4)
+                            .frame(width: 90, height: 90)
+                            .padding(.leading, 18)
+                            .shadow(radius: 2)
+                            .transition(.opacity)
                     }
+                    
+                    Spacer()
                 }
-                .clipShape(Circle())
-                .shadow(radius: 10)
-
-                if detector.isRunning {
-                    Text(detector.eyesOpen ? "Eyes Open" : "Drowsiness Detected!")
-                        .font(.headline)
-                        .foregroundColor(detector.eyesOpen ? .green : .red)
-                        .padding(.top, 20)
-                }
-
+                .padding(.top, -10)
+                .offset(y: -5)
+                
                 Spacer()
-
-                Button {
-                    if detector.isRunning {
-                        detector.stop()
-                    } else {
-                        detector.start()
+                
+                if !detector.isRunning {
+                    ZStack {
+                        Image("camera-background")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 220, height: 220)
+                            .overlay(
+                                Image(systemName: "camera.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 48, height: 48)
+                                    .foregroundColor(.white)
+                            )
+                        Circle()
+                            .stroke(Color.white, lineWidth: 4)
+                            .frame(width: 175, height: 175)
+                            .shadow(color: .white.opacity(0.5), radius: 10)
+                            .offset(x: -1.5)
                     }
-                } label: {
+                    .padding(.bottom, 10)
+                }
+                
+                if detector.isRunning {
+                    Text(detector.closedDuration > 5.0 ? "DROWSINESS DETECTED!" : "Eyes Open")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(detector.closedDuration > 5.0 ? Color.red : Color(hex: "#459E48"))
+                        .padding(.top, 8)
+                        .shadow(color: .black.opacity(0.8), radius: 2)
+                } else {
+                    Text("Ready to Start")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                        .padding(.top, 8)
+                }
+                
+                Spacer()
+                
+                Button(action: toggleDetection) {
                     Text(detector.isRunning ? "Stop Detection" : "Start Detection")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(detector.isRunning ? Color.red.opacity(0.8) : buttonColor)
-                        .cornerRadius(16)
+                        .padding(.vertical, 16)
+                        .background(detector.isRunning ? Color.red.opacity(0.9) : buttonColor)
+                        .cornerRadius(14)
                         .shadow(radius: 6)
                 }
                 .padding(.horizontal, 24)
-                .padding(.bottom, 32)
+                .padding(.bottom, 36)
             }
         }
+        .navigationBarBackButtonHidden(true)
         .onReceive(detector.$closedDuration) { duration in
-            if duration > 1.5 {
-                print("🚨 WAKE UP! Eyes closed for \(duration)")
+            if duration > 5.00 {
+                print("🚨 Eyes closed for \(duration)s — TRIGGER ALARM HERE")
             }
         }
     }
-}
-
-struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession?
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        view.backgroundColor = .black
-        
-        guard let session = session else { return view }
-        
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = view.bounds
-        view.layer.addSublayer(previewLayer)
-        
-        context.coordinator.previewLayer = previewLayer
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let layer = context.coordinator.previewLayer {
-            layer.frame = uiView.bounds
+    
+    private func toggleDetection() {
+        withAnimation {
+            if detector.isRunning {
+                detector.stop()
+            } else {
+                detector.start()
+            }
         }
     }
     
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-    
-    class Coordinator {
-        var previewLayer: AVCaptureVideoPreviewLayer?
-    }
-}
+    struct CameraPreview: UIViewRepresentable {
+        let session: AVCaptureSession?
 
-extension EyeDetector {
-    func getSession() -> AVCaptureSession? {
-        return self.value(forKey: "session") as? AVCaptureSession
+        func makeUIView(context: Context) -> VideoPreviewView {
+            let view = VideoPreviewView()
+            view.backgroundColor = .black
+            view.videoPreviewLayer.session = session
+            view.videoPreviewLayer.videoGravity = .resizeAspectFill
+            view.videoPreviewLayer.connection?.videoRotationAngle = 90
+            return view
+        }
+
+        func updateUIView(_ uiView: VideoPreviewView, context: Context) {
+            if uiView.videoPreviewLayer.session != session {
+                uiView.videoPreviewLayer.session = session
+            }
+            if let connection = uiView.videoPreviewLayer.connection {
+                if #available(iOS 17.0, *) {
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                    }
+                } else {
+                    if connection.isVideoOrientationSupported {
+                        connection.videoOrientation = .portrait
+                    }
+                }
+                if connection.isVideoMirroringSupported {
+                    connection.automaticallyAdjustsVideoMirroring = false
+                    connection.isVideoMirrored = true
+                }
+            }
+        }
+    }
+
+    class VideoPreviewView: UIView {
+        override class var layerClass: AnyClass {
+            return AVCaptureVideoPreviewLayer.self
+        }
+        var videoPreviewLayer: AVCaptureVideoPreviewLayer {
+            return layer as! AVCaptureVideoPreviewLayer
+        }
     }
 }

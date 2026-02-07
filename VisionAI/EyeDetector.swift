@@ -9,7 +9,7 @@ final class EyeDetector: NSObject, ObservableObject {
     @Published var closedDuration: TimeInterval = 0
 
     var onEyesClosedLong: (() -> Void)?
-    private let closedThreshold: TimeInterval = 1.0
+    private let closedThreshold: TimeInterval = 5.0
     private var lastFaceSeen: Date?
 
     var session: AVCaptureSession?
