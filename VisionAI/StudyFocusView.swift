@@ -14,6 +14,8 @@ struct StudyFocusView: View {
     @State private var customSeconds: Int = 0
     @State private var isPomodoroEnabled: Bool = false
     @State private var showDetection = false
+    @State private var avatarImage: UIImage? = nil
+    @State private var isViewReady = false
 
     private let pickerRowHeight: CGFloat = 80
     private let pickerWidth: CGFloat = 104
@@ -28,12 +30,17 @@ struct StudyFocusView: View {
 
             VStack(spacing: 0) {
                 ZStack {
-                    if isPomodoroEnabled {
-                        pomodoroContent
-                            .transition(.move(edge: .leading).combined(with: .opacity))
+                    if isViewReady {
+                        if isPomodoroEnabled {
+                            pomodoroContent
+                                .transition(.move(edge: .leading).combined(with: .opacity))
+                        } else {
+                            DriverStartUI(onStart: { print("Driver detection started") })
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
                     } else {
-                        DriverStartUI(onStart: { print("Driver detection started") })
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                        Color.clear
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .animation(.easeInOut(duration: 0.35), value: isPomodoroEnabled)
@@ -75,6 +82,8 @@ struct StudyFocusView: View {
                     .padding(.horizontal, 24)
                     .padding(.bottom, 36)
                 }
+                .opacity(isViewReady ? 1 : 0)
+                .animation(.easeIn(duration: 0.3), value: isViewReady)
             }
 
             topBar
@@ -88,12 +97,26 @@ struct StudyFocusView: View {
         .onAppear {
             selectedMinutes = min(max(selectedMinutes, 25), 60)
             customMinutes = selectedMinutes
+            
+            if avatarImage == nil, let data = profileImageData {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    if let decoded = UIImage(data: data) {
+                        DispatchQueue.main.async {
+                            self.avatarImage = decoded
+                        }
+                    }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isViewReady = true
+            }
         }
         .navigationDestination(isPresented: $showDetection) {
             let totalSeconds = (selectedMinutes * 60) + selectedSeconds
             DriverDetectionView(
                 autoStart: true,
-                pomodoroDuration: isPomodoroEnabled ? totalSeconds : nil
+                pomodoroDuration: isPomodoroEnabled ? totalSeconds : nil,
+                launchedFromStudy: true
             )
         }
     }
@@ -101,7 +124,6 @@ struct StudyFocusView: View {
     private var topBar: some View {
         GeometryReader { geo in
             HStack {
-                // Back
                 Button {
                     dismiss()
                 } label: {
@@ -118,8 +140,7 @@ struct StudyFocusView: View {
                     // profile tapped
                 } label: {
                     Group {
-                        if let data = profileImageData,
-                           let ui = UIImage(data: data) {
+                        if let ui = avatarImage {
                             Image(uiImage: ui)
                                 .resizable()
                                 .scaledToFill()
@@ -141,7 +162,6 @@ struct StudyFocusView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
     }
-
 
     private var pomodoroContent: some View {
         VStack {

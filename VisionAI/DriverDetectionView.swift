@@ -20,12 +20,17 @@ struct DriverDetectionView: View {
     private let bgColor = Color(hex: "#2D3135")
     private let buttonColor = Color(hex: "#49494A")
     
+    let launchedFromStudy: Bool
     let autoStart: Bool
     let pomodoroDuration: Int?
-    
-    init(autoStart: Bool = false, pomodoroDuration: Int? = nil) {
+
+    init(detector: EyeDetector? = nil,
+         autoStart: Bool = false,
+         pomodoroDuration: Int? = nil,
+         launchedFromStudy: Bool = false) {
         self.autoStart = autoStart
         self.pomodoroDuration = pomodoroDuration
+        self.launchedFromStudy = launchedFromStudy
     }
 
     private var isActiveState: Bool {
@@ -66,7 +71,9 @@ struct DriverDetectionView: View {
                                 .transition(.opacity)
                         }
                     } else if !isActiveState {
-                        Button(action: { dismiss() }) {
+                        Button(action: {
+                            stopDetectionAndDismiss()
+                        }) {
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundColor(.white)
@@ -86,13 +93,13 @@ struct DriverDetectionView: View {
                                     timeText: pomodoroTimer.formattedTime(),
                                     isRunning: pomodoroTimer.isRunning
                                 )
-                                .padding(.top, 25)
+                                .padding(.top, 6)
+                                .padding(.trailing, 16)
                             }
                             
                             if !isActiveState {
                                 NavigationLink(destination: DriverProfileView(onExit: {
-                                    detector.stop()
-                                    pomodoroTimer.stop()
+                                    stopDetectionForProfile()
                                 })) {
                                     profileImage
                                         .frame(width: 45, height: 45)
@@ -162,7 +169,7 @@ struct DriverDetectionView: View {
                     withAnimation(.easeOut(duration: 0.1)) {
                         showingAlert = false
                     }
-                    detector.start()
+                    startDetectorSafe()
                 }
                 .transition(.opacity)
                 .zIndex(100)
@@ -188,13 +195,13 @@ struct DriverDetectionView: View {
                 tripAlerts += 1
                 showingAlert = true
                 playAlertSound()
-                detector.stop()
+                stopDetectorSafe()
             }
         }
         .task(id: autoStart) {
             if autoStart && !detector.isRunning {
                 detector.resetTrip()
-                detector.start()
+                startDetectorSafe()
                 
                 if let duration = pomodoroDuration {
                     pomodoroTimer.start(seconds: duration)
@@ -203,6 +210,52 @@ struct DriverDetectionView: View {
         }
     }
     
+    private func startDetectorSafe() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.detector.start()
+        }
+    }
+    
+    private func stopDetectorSafe() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.detector.stop()
+        }
+    }
+    
+    private func toggleDetection() {
+        withAnimation {
+            if detector.isRunning {
+                stopAlertSound()
+                stopDetectorSafe()
+                pomodoroTimer.stop()
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation(.easeInOut) {
+                        showAnalytics = true
+                    }
+                }
+            } else {
+                tripAlerts = 0
+                detector.resetTrip()
+                startDetectorSafe()
+                if let duration = pomodoroDuration {
+                    pomodoroTimer.reset(seconds: duration, startImmediately: true)
+                }
+            }
+        }
+    }
+    
+    private func stopDetectionAndDismiss() {
+        stopDetectorSafe()
+        pomodoroTimer.stop()
+        dismiss()
+    }
+    
+    private func stopDetectionForProfile() {
+        stopDetectorSafe()
+        pomodoroTimer.stop()
+    }
+
     private var profileImage: some View {
         Group {
             if let data = profileImageData,
@@ -215,29 +268,6 @@ struct DriverDetectionView: View {
                     .resizable()
                     .scaledToFit()
                     .padding(8)
-            }
-        }
-    }
-
-    private func toggleDetection() {
-        withAnimation {
-            if detector.isRunning {
-                stopAlertSound()
-                detector.stop()
-                pomodoroTimer.stop()
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    withAnimation(.easeInOut) {
-                        showAnalytics = true
-                    }
-                }
-            } else {
-                tripAlerts = 0
-                detector.resetTrip()
-                detector.start()
-                if let duration = pomodoroDuration {
-                    pomodoroTimer.reset(seconds: duration, startImmediately: true)
-                }
             }
         }
     }
@@ -283,8 +313,14 @@ struct DriverDetectionView: View {
                 Spacer()
 
                 Button {
-                    withAnimation {
-                        showAnalytics = false
+                    if launchedFromStudy {
+                        DispatchQueue.main.async {
+                            dismiss()
+                        }
+                    } else {
+                        withAnimation {
+                            showAnalytics = false
+                        }
                     }
                 } label: {
                     Text("Back to Dashboard")
@@ -340,7 +376,7 @@ struct DriverDetectionView: View {
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [])
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
         } catch {
             print("❌ Audio session setup failed:", error)
