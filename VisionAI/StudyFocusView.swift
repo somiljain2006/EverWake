@@ -198,6 +198,12 @@ struct StudyFocusView: View {
                     MinuteWheelPicker(range: 0...59, selection: $customSeconds, rowHeight: pickerRowHeight)
                         .frame(width: pickerWidth, height: 180)
                         .clipped()
+                        .onChange(of: customSeconds) { _, newValue in
+                            let clamped = min(max(newValue, 0), 59)
+                            selectedSeconds = clamped
+                            if customSeconds != clamped { customSeconds = clamped }
+                        }
+
                 }
                 .frame(width: 280, height: 180)
                 .mask(Circle().frame(width: 250, height: 250))
