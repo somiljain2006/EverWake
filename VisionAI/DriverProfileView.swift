@@ -253,7 +253,7 @@ struct DriverProfileView: View {
                     }
                 }
 
-                Text("Please report issues via GitHub or the App Store.")
+                Text("Please report at https://github.com/somiljain2006/VisionAI")
                     .font(.system(size: 16))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
