@@ -151,10 +151,14 @@ struct StudyFocusView: View {
             }
         }
         .navigationDestination(isPresented: $showDetection) {
-            let totalSeconds = (selectedMinutes * 60) + selectedSeconds
+            let totalFocusSeconds = (selectedMinutes * 60) + selectedSeconds
+            let breakMin = breakMinutes(for: selectedMinutes)
+            let breakSecs = breakMin * 60
+            
             DriverDetectionView(
                 autoStart: true,
-                pomodoroDuration: isPomodoroEnabled ? totalSeconds : nil,
+                pomodoroDuration: isPomodoroEnabled ? totalFocusSeconds : nil,
+                breakDuration: isPomodoroEnabled ? breakSecs : nil, 
                 launchedFromStudy: true
             )
         }

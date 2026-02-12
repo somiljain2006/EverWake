@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Combine
 
 struct DriverDetectionView: View {
 
@@ -8,11 +9,13 @@ struct DriverDetectionView: View {
     @StateObject private var detector = EyeDetector()
     @StateObject private var pomodoroTimer = PomodoroTimer()
     
+    @State private var isBreakActive = false
+    @State private var breakTimeRemaining = 0
+    @State private var breakTimerObj: Timer?
     @State private var showingAlert = false
     @State private var isRestarting = false
     @State private var showAnalytics = false
     @State private var tripAlerts = 0
-    @State private var alertTimer: Timer?
     @State private var alertPlayer: AVAudioPlayer?
     @State private var dragOffset: CGFloat = 0
     
@@ -21,17 +24,21 @@ struct DriverDetectionView: View {
 
     private let bgColor = Color(hex: "#2D3135")
     private let buttonColor = Color(hex: "#49494A")
+    private let accentColor = Color(hex: "#8B8CFB")
     
     let launchedFromStudy: Bool
     let autoStart: Bool
     let pomodoroDuration: Int?
+    let breakDuration: Int?
 
     init(detector: EyeDetector? = nil,
          autoStart: Bool = false,
          pomodoroDuration: Int? = nil,
+         breakDuration: Int? = nil,
          launchedFromStudy: Bool = false) {
         self.autoStart = autoStart
         self.pomodoroDuration = pomodoroDuration
+        self.breakDuration = breakDuration
         self.launchedFromStudy = launchedFromStudy
     }
 
@@ -40,6 +47,98 @@ struct DriverDetectionView: View {
     }
 
     var body: some View {
+        ZStack {
+            mainDetectionContent
+                .blur(radius: isBreakActive ? 15 : 0)
+                .animation(.easeInOut(duration: 0.5), value: isBreakActive)
+
+            if showingAlert {
+                WakeUpScreen {
+                    stopAlertSound()
+                    detector.acknowledgeAlertAndReset()
+                    withAnimation(.easeOut(duration: 0.1)) {
+                        showingAlert = false
+                    }
+                    startDetectorSafe()
+                }
+                .transition(.opacity)
+                .zIndex(100)
+            }
+            
+            if isBreakActive {
+                breakView
+                    .zIndex(150)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+            
+            if showAnalytics {
+                analyticsView
+                    .zIndex(200)
+            }
+        }
+        .offset(x: dragOffset)
+        .animation(.interactiveSpring(), value: dragOffset)
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onChanged { value in
+                    guard canSwipeBack else { return }
+                    if value.translation.width > 0 {
+                        dragOffset = value.translation.width
+                    }
+                }
+                .onEnded { value in
+                    guard canSwipeBack else {
+                        dragOffset = 0
+                        return
+                    }
+
+                    if value.translation.width > 120 {
+                        stopDetectionAndDismiss()
+                    }
+
+                    dragOffset = 0
+                }
+        )
+        .onAppear {
+            configureAudioSession()
+        }
+        .navigationBarBackButtonHidden(true)
+        .onChange(of: detector.isRunning) { _, newValue in
+            if newValue {
+                isRestarting = false
+            }
+        }
+        .onChange(of: pomodoroTimer.remainingSeconds) { _, newValue in
+            if pomodoroDuration != nil &&
+               newValue == 0 &&
+               !isBreakActive &&
+               !showAnalytics {
+
+                startBreakMode()
+            }
+        }
+        .onReceive(detector.$closedDuration) { duration in
+            if duration > 2.5 && !showingAlert {
+                print("🚨 Eyes closed for \(duration)s — TRIGGER ALARM")
+                tripAlerts += 1
+                showingAlert = true
+                playAlertSound()
+                stopDetectorSafe()
+            }
+        }
+        .task(id: autoStart) {
+            if autoStart && !detector.isRunning {
+                detector.resetTrip()
+                startDetectorSafe()
+                
+                if let duration = pomodoroDuration {
+                    pomodoroTimer.start(seconds: duration)
+                }
+            }
+        }
+    }
+    
+    private var mainDetectionContent: some View {
         ZStack {
             if detector.isRunning {
                 ZStack {
@@ -169,76 +268,81 @@ struct DriverDetectionView: View {
                 .padding(.bottom, 36)
                 .opacity(showingAlert ? 0 : 1)
             }
-
-            if showingAlert {
-                WakeUpScreen {
-                    stopAlertSound()
-                    detector.acknowledgeAlertAndReset()
-                    withAnimation(.easeOut(duration: 0.1)) {
-                        showingAlert = false
-                    }
-                    startDetectorSafe()
-                }
-                .transition(.opacity)
-                .zIndex(100)
-            }
+        }
+    }
+    
+    private var breakView: some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
             
-            if showAnalytics {
-                analyticsView
-                    .zIndex(200)
-            }
-        }
-        .offset(x: dragOffset)
-        .animation(.interactiveSpring(), value: dragOffset)
-        .gesture(
-            DragGesture(minimumDistance: 20)
-                .onChanged { value in
-                    guard canSwipeBack else { return }
-                    if value.translation.width > 0 {
-                        dragOffset = value.translation.width
-                    }
-                }
-                .onEnded { value in
-                    guard canSwipeBack else {
-                        dragOffset = 0
-                        return
-                    }
-
-                    if value.translation.width > 120 {
-                        stopDetectionAndDismiss()
-                    }
-
-                    dragOffset = 0
-                }
-        )
-        .onAppear {
-            configureAudioSession()
-        }
-        .navigationBarBackButtonHidden(true)
-        .onChange(of: detector.isRunning) { _, newValue in
-            if newValue {
-                isRestarting = false
-            }
-        }
-        .onReceive(detector.$closedDuration) { duration in
-            if duration > 2.5 && !showingAlert {
-                print("🚨 Eyes closed for \(duration)s — TRIGGER ALARM")
-                tripAlerts += 1
-                showingAlert = true
-                playAlertSound()
-                stopDetectorSafe()
-            }
-        }
-        .task(id: autoStart) {
-            if autoStart && !detector.isRunning {
-                detector.resetTrip()
-                startDetectorSafe()
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                Spacer()
                 
-                if let duration = pomodoroDuration {
-                    pomodoroTimer.start(seconds: duration)
+                Text("Break Time")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.bottom, 20)
+                
+                Text(formatBreakTime(breakTimeRemaining))
+                    .font(.system(size: 80, weight: .light))
+                    .fontDesign(.rounded)
+                    .foregroundColor(accentColor)
+                    .shadow(color: accentColor.opacity(0.3), radius: 10)
+                
+                Text("Relax and recharge your mind.")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.top, 10)
+                
+                Spacer()
+                
+                Button {
+                    stopBreakAndExit()
+                } label: {
+                    Text("Exit to Dashboard")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(buttonColor)
+                        .cornerRadius(14)
+                        .shadow(radius: 6)
                 }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 36)
             }
         }
+    }
+    
+    private func startBreakMode() {
+        guard let bDuration = breakDuration else { return }
+        
+        stopDetectorSafe()
+        pomodoroTimer.stop()
+        
+        withAnimation {
+            isBreakActive = true
+            breakTimeRemaining = bDuration
+        }
+        
+        breakTimerObj?.invalidate()
+        breakTimerObj = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            if breakTimeRemaining > 0 {
+                breakTimeRemaining -= 1
+            } else {
+                breakTimerObj?.invalidate()
+            }
+        }
+    }
+    
+    private func stopBreakAndExit() {
+        breakTimerObj?.invalidate()
+        breakTimerObj = nil
+        dismiss()
     }
     
     private func startDetectorSafe() {
@@ -380,6 +484,12 @@ struct DriverDetectionView: View {
         }
     }
     
+    private func formatBreakTime(_ totalSeconds: Int) -> String {
+        let min = totalSeconds / 60
+        let sec = totalSeconds % 60
+        return String(format: "%02d:%02d", min, sec)
+    }
+    
     private func playAlertSound() {
         stopAlertSound()
 
@@ -433,7 +543,7 @@ struct DriverDetectionView: View {
         !detector.isRunning &&
         !showingAlert &&
         !showAnalytics &&
-        !isRestarting
+        !isRestarting &&
+        !isBreakActive 
     }
-
 }
