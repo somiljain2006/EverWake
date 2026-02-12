@@ -329,12 +329,34 @@ struct DriverDetectionView: View {
             breakTimeRemaining = bDuration
         }
         
+        playAlertOnce()
+        
         breakTimerObj?.invalidate()
         breakTimerObj = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            if breakTimeRemaining > 0 {
-                breakTimeRemaining -= 1
-            } else {
-                breakTimerObj?.invalidate()
+            DispatchQueue.main.async {
+                if breakTimeRemaining > 0 {
+                    breakTimeRemaining -= 1
+                } else {
+                    breakTimerObj?.invalidate()
+                    handleBreakEnd()
+                }
+            }
+        }
+    }
+    
+    private func handleBreakEnd() {
+        playAlertOnce()
+
+        // End break UI
+        withAnimation {
+            isBreakActive = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.startDetectorSafe()
+            
+            if let duration = self.pomodoroDuration {
+                self.pomodoroTimer.reset(seconds: duration, startImmediately: true)
             }
         }
     }
@@ -521,6 +543,40 @@ struct DriverDetectionView: View {
             alertPlayer?.play()
         } catch {
             print("❌ Failed to play alert sound:", error)
+        }
+    }
+    
+    private func playAlertOnce() {
+        stopAlertSound()
+
+        var url: URL?
+
+        if launchedFromStudy {
+            if studyAlertSoundId == StudyAlertStorage.customSoundId {
+                url = StudyAlertStorage.customSoundURL
+            } else {
+                let file = studyAlertSounds
+                    .first(where: { $0.id == studyAlertSoundId })?
+                    .fileName ?? "study_bell"
+
+                url = Bundle.main.url(forResource: file, withExtension: "wav")
+            }
+        } else {
+            url = Bundle.main.url(forResource: "alarm", withExtension: "wav")
+        }
+
+        guard let soundURL = url else {
+            print("❌ Alert sound not found for one-shot")
+            return
+        }
+
+        do {
+            alertPlayer = try AVAudioPlayer(contentsOf: soundURL)
+            alertPlayer?.numberOfLoops = 0    
+            alertPlayer?.volume = 1.0
+            alertPlayer?.play()
+        } catch {
+            print("❌ Failed to play one-shot alert sound:", error)
         }
     }
     
