@@ -10,9 +10,22 @@
 		082F22492F240A6C004D068A /* VisionAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VisionAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		081F397A2F46132E0073601A /* Exceptions for "VisionAI" folder in "VisionAI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 082F22482F240A6C004D068A /* VisionAI */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		082F224B2F240A6C004D068A /* VisionAI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				081F397A2F46132E0073601A /* Exceptions for "VisionAI" folder in "VisionAI" target */,
+			);
 			path = VisionAI;
 			sourceTree = "<group>";
 		};
@@ -251,7 +264,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VisionAI/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "VisionAI needs camera access to detect eye closure and movements.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "VisionAI needs microphone access to keep driver monitoring active in the background during Picture-in-Picture mode.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow VisionAI to set a profile photo";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -296,7 +311,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VisionAI/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "VisionAI needs camera access to detect eye closure and movements.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "VisionAI needs microphone access to keep driver monitoring active in the background during Picture-in-Picture mode.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow VisionAI to set a profile photo";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

@@ -1,10 +1,12 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import AVKit
 
 struct DriverDetectionView: View {
 
     @Environment(\.dismiss) var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     
     @StateObject private var detector = EyeDetector()
     @StateObject private var pomodoroTimer = PomodoroTimer()
@@ -18,7 +20,10 @@ struct DriverDetectionView: View {
     @State private var tripAlerts = 0
     @State private var alertPlayer: AVAudioPlayer?
     @State private var dragOffset: CGFloat = 0
-    
+    @State private var pipController: AVPictureInPictureController?
+    @State private var pipCoordinator = PiPCoordinator()
+    @State private var isPiPActive = false
+
     @AppStorage("profileImageData") private var profileImageData: Data?
     @AppStorage("studyAlertSound") private var studyAlertSoundId: String = "bell"
 
@@ -102,12 +107,30 @@ struct DriverDetectionView: View {
         .onAppear {
             configureAudioSession()
         }
-        .navigationBarBackButtonHidden(true)
-        .onChange(of: detector.isRunning) { _, newValue in
-            if newValue {
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background,
+               detector.isRunning,
+               let controller = pipController,
+               controller.isPictureInPicturePossible {
+
+                controller.startPictureInPicture()
+            }
+
+            if phase == .active {
+                pipController?.stopPictureInPicture()
+            }
+        }
+        .onChange(of: detector.hasRenderedFirstFrame) { _, rendered in
+            if rendered { setupPiPIfPossible() }
+        }
+        .onChange(of: detector.isRunning) { _, running in
+            if !running {
+                pipController?.stopPictureInPicture()
+                pipController = nil
                 isRestarting = false
             }
         }
+        .navigationBarBackButtonHidden(true)
         .onChange(of: pomodoroTimer.remainingSeconds) { _, newValue in
             if pomodoroDuration != nil &&
                newValue == 0 &&
@@ -119,7 +142,6 @@ struct DriverDetectionView: View {
         }
         .onReceive(detector.$closedDuration) { duration in
             if duration > 2.5 && !showingAlert {
-                print("🚨 Eyes closed for \(duration)s — TRIGGER ALARM")
                 tripAlerts += 1
                 showingAlert = true
                 playAlertSound()
@@ -139,30 +161,25 @@ struct DriverDetectionView: View {
     }
     
     private var mainDetectionContent: some View {
-        ZStack {
-            if detector.isRunning {
-                ZStack {
-                    CameraPreview(session: detector.session)
-                        .ignoresSafeArea()
-
-                    if !detector.isRunning {
-                        bgColor
-                            .ignoresSafeArea()
-                            .overlay(
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.0)
-                            )
-                    }
-                }
+        let det = detector
+        return ZStack {
+            PiPVideoView(pipLayer: detector.activePipLayer)
+                .ignoresSafeArea()
+                .opacity(detector.isRunning ? 1 : 0)
+            if det.isRunning {
+                CameraPreview(session: det.session)
+                    .ignoresSafeArea()
             } else {
                 bgColor.ignoresSafeArea()
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.0)
             }
 
             VStack {
                 HStack {
-                    if detector.isRunning {
-                        if detector.closedDuration <= 2.5 {
+                    if det.isRunning {
+                        if det.closedDuration <= 2.5 {
                             Image("eyes-wide")
                                 .resizable()
                                 .scaledToFit()
@@ -186,7 +203,7 @@ struct DriverDetectionView: View {
 
                     Spacer()
 
-                    if !isActiveState || detector.isRunning {
+                    if !isActiveState || det.isRunning {
                         HStack(spacing: 12) {
                             
                             if pomodoroDuration != nil {
@@ -299,10 +316,7 @@ struct DriverDetectionView: View {
                     .padding(.top, 10)
                 
                 Spacer()
-                
-                Button {
-                    stopBreakAndExit()
-                } label: {
+                Button(action: stopBreakAndExit) {
                     Text("Exit to Dashboard")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
@@ -314,117 +328,6 @@ struct DriverDetectionView: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 36)
-            }
-        }
-    }
-    
-    private func startBreakMode() {
-        guard let bDuration = breakDuration else { return }
-        
-        stopDetectorSafe()
-        pomodoroTimer.stop()
-        
-        withAnimation {
-            isBreakActive = true
-            breakTimeRemaining = bDuration
-        }
-        
-        playAlertOnce()
-        
-        breakTimerObj?.invalidate()
-        breakTimerObj = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            DispatchQueue.main.async {
-                if breakTimeRemaining > 0 {
-                    breakTimeRemaining -= 1
-                } else {
-                    breakTimerObj?.invalidate()
-                    handleBreakEnd()
-                }
-            }
-        }
-    }
-    
-    private func handleBreakEnd() {
-        playAlertOnce()
-
-        // End break UI
-        withAnimation {
-            isBreakActive = false
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            self.startDetectorSafe()
-            
-            if let duration = self.pomodoroDuration {
-                self.pomodoroTimer.reset(seconds: duration, startImmediately: true)
-            }
-        }
-    }
-    
-    private func stopBreakAndExit() {
-        breakTimerObj?.invalidate()
-        breakTimerObj = nil
-        dismiss()
-    }
-    
-    private func startDetectorSafe() {
-        Task { @MainActor in
-            detector.start()
-        }
-    }
-    
-    private func stopDetectorSafe() {
-        Task { @MainActor in
-            detector.stop()
-        }
-    }
-    
-    private func toggleDetection() {
-        withAnimation {
-            if detector.isRunning {
-                stopAlertSound()
-                stopDetectorSafe()
-                pomodoroTimer.stop()
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    withAnimation(.easeInOut) {
-                        showAnalytics = true
-                    }
-                }
-            } else {
-                tripAlerts = 0
-                detector.resetTrip()
-                startDetectorSafe()
-                if let duration = pomodoroDuration {
-                    pomodoroTimer.reset(seconds: duration, startImmediately: true)
-                }
-            }
-        }
-    }
-    
-    private func stopDetectionAndDismiss() {
-        stopDetectorSafe()
-        pomodoroTimer.stop()
-        dismiss()
-    }
-    
-    private func stopDetectionForProfile() {
-        stopDetectorSafe()
-        pomodoroTimer.stop()
-    }
-
-    private var profileImage: some View {
-        Group {
-            if let data = profileImageData,
-               let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: "person.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .padding(8)
             }
         }
     }
@@ -496,48 +399,139 @@ struct DriverDetectionView: View {
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
-    private func sessionTimeText(from duration: TimeInterval) -> String {
-        let secs = Int(round(duration))
-        if secs >= 60 {
-            let minutes = secs / 60
-            return "\(minutes) min"
-        } else {
-            return "\(secs) sec"
+    private var profileImage: some View {
+        Group {
+            if let data = profileImageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+            } else {
+                Image(systemName: "person.fill").resizable().scaledToFit().padding(8)
+            }
         }
     }
-    
-    private func formatBreakTime(_ totalSeconds: Int) -> String {
-        let min = totalSeconds / 60
-        let sec = totalSeconds % 60
-        return String(format: "%02d:%02d", min, sec)
+
+    func setupPiPIfPossible() {
+        guard
+            AVPictureInPictureController.isPictureInPictureSupported(),
+            pipController == nil
+        else { return }
+
+        let layer = detector.activePipLayer
+        layer.videoGravity = .resizeAspectFill
+
+        let controller = AVPictureInPictureController(
+            contentSource: .init(
+                sampleBufferDisplayLayer: layer,
+                playbackDelegate: pipCoordinator
+            )
+        )
+        controller.delegate = pipCoordinator
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+
+        pipCoordinator.onStart = { DispatchQueue.main.async { self.isPiPActive = true } }
+        pipCoordinator.onStop  = { DispatchQueue.main.async { self.isPiPActive = false } }
+        pipController = controller
     }
-    
+
+
+    private func startDetectorSafe() {
+        Task { @MainActor in detector.start() }
+    }
+
+    private func stopDetectorSafe() {
+        Task { @MainActor in detector.stop() }
+    }
+
+    private func toggleDetection() {
+        withAnimation {
+            if detector.isRunning {
+                stopAlertSound()
+                stopDetectorSafe()
+                pomodoroTimer.stop()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation(.easeInOut) { showAnalytics = true }
+                }
+            } else {
+                tripAlerts = 0
+                detector.resetTrip()
+                startDetectorSafe()
+                if let duration = pomodoroDuration {
+                    pomodoroTimer.reset(seconds: duration, startImmediately: true)
+                }
+            }
+        }
+    }
+
+    private func stopDetectionAndDismiss() {
+        stopDetectorSafe()
+        pomodoroTimer.stop()
+        dismiss()
+    }
+
+    private func stopDetectionForProfile() {
+        stopDetectorSafe()
+        pomodoroTimer.stop()
+    }
+
+    private func startBreakMode() {
+        guard let bDuration = breakDuration else { return }
+        stopDetectorSafe()
+        pomodoroTimer.stop()
+        withAnimation {
+            isBreakActive = true
+            breakTimeRemaining = bDuration
+        }
+        playAlertOnce()
+        breakTimerObj?.invalidate()
+        breakTimerObj = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                if breakTimeRemaining > 0 {
+                    breakTimeRemaining -= 1
+                } else {
+                    breakTimerObj?.invalidate()
+                    handleBreakEnd()
+                }
+            }
+        }
+    }
+
+    private func handleBreakEnd() {
+        playAlertOnce()
+        withAnimation { isBreakActive = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            startDetectorSafe()
+            if let duration = pomodoroDuration {
+                pomodoroTimer.reset(seconds: duration, startImmediately: true)
+            }
+        }
+    }
+
+    private func stopBreakAndExit() {
+        breakTimerObj?.invalidate()
+        breakTimerObj = nil
+        dismiss()
+    }
+
+    // MARK: - Audio
+
+    private func configureAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(
+                .playAndRecord,
+                mode: .videoChat,
+                options: [.mixWithOthers, .defaultToSpeaker, .duckOthers]
+            )
+            try session.setActive(true)
+        } catch {
+            print("❌ Audio session setup failed:", error)
+        }
+    }
+
     private func playAlertSound() {
         stopAlertSound()
-
-        var url: URL?
-
-        if launchedFromStudy {
-            if studyAlertSoundId == StudyAlertStorage.customSoundId {
-                url = StudyAlertStorage.customSoundURL
-            } else {
-                let file = studyAlertSounds
-                    .first(where: { $0.id == studyAlertSoundId })?
-                    .fileName ?? "study_bell"
-
-                url = Bundle.main.url(forResource: file, withExtension: "wav")
-            }
-        } else {
-            url = Bundle.main.url(forResource: "alarm", withExtension: "wav")
-        }
-
-        guard let soundURL = url else {
-            print("❌ Alert sound not found")
-            return
-        }
-
+        guard let url = alertSoundURL() else { return }
         do {
-            alertPlayer = try AVAudioPlayer(contentsOf: soundURL)
+            alertPlayer = try AVAudioPlayer(contentsOf: url)
             alertPlayer?.numberOfLoops = -1
             alertPlayer?.volume = 1.0
             alertPlayer?.play()
@@ -548,53 +542,42 @@ struct DriverDetectionView: View {
     
     private func playAlertOnce() {
         stopAlertSound()
-
-        var url: URL?
-
-        if launchedFromStudy {
-            if studyAlertSoundId == StudyAlertStorage.customSoundId {
-                url = StudyAlertStorage.customSoundURL
-            } else {
-                let file = studyAlertSounds
-                    .first(where: { $0.id == studyAlertSoundId })?
-                    .fileName ?? "study_bell"
-
-                url = Bundle.main.url(forResource: file, withExtension: "wav")
-            }
-        } else {
-            url = Bundle.main.url(forResource: "alarm", withExtension: "wav")
-        }
-
-        guard let soundURL = url else {
-            print("❌ Alert sound not found for one-shot")
-            return
-        }
-
+        guard let url = alertSoundURL() else { return }
         do {
-            alertPlayer = try AVAudioPlayer(contentsOf: soundURL)
-            alertPlayer?.numberOfLoops = 0    
+            alertPlayer = try AVAudioPlayer(contentsOf: url)
+            alertPlayer?.numberOfLoops = 0
             alertPlayer?.volume = 1.0
             alertPlayer?.play()
         } catch {
             print("❌ Failed to play one-shot alert sound:", error)
         }
     }
-    
+
+    private func alertSoundURL() -> URL? {
+        if launchedFromStudy {
+            if studyAlertSoundId == StudyAlertStorage.customSoundId {
+                return StudyAlertStorage.customSoundURL
+            }
+            let file = studyAlertSounds.first(where: { $0.id == studyAlertSoundId })?.fileName ?? "study_bell"
+            return Bundle.main.url(forResource: file, withExtension: "wav")
+        }
+        return Bundle.main.url(forResource: "alarm", withExtension: "wav")
+    }
+
     private func stopAlertSound() {
         alertPlayer?.stop()
         alertPlayer = nil
     }
-    
-    private func configureAudioSession() {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
-            try session.setActive(true)
-        } catch {
-            print("❌ Audio session setup failed:", error)
-        }
+
+    private func sessionTimeText(from duration: TimeInterval) -> String {
+        let secs = Int(round(duration))
+        return secs >= 60 ? "\(secs / 60) min" : "\(secs) sec"
     }
-    
+
+    private func formatBreakTime(_ totalSeconds: Int) -> String {
+        String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
     private var canSwipeBack: Bool {
         !detector.isRunning &&
         !showingAlert &&

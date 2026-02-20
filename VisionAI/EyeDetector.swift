@@ -1,7 +1,9 @@
 import SwiftUI
-import AVFoundation
-import Vision
+@preconcurrency import AVFoundation
+@preconcurrency import Vision
 import Combine
+import CoreMedia
+@preconcurrency import AVKit
 
 @MainActor
 final class EyeDetector: NSObject, ObservableObject {
@@ -10,12 +12,24 @@ final class EyeDetector: NSObject, ObservableObject {
     @Published var closedDuration: TimeInterval = 0
     @Published var isStarting: Bool = false
     @Published var totalTripDuration: TimeInterval = 0
-    
+    @Published var hasRenderedFirstFrame = false
+
     @Published private(set) var alertsCount: Int = 0
     @Published private(set) var lastSessionDuration: TimeInterval = 0
     @Published private(set) var lastSessionAlerts: Int = 0
+    
+    nonisolated(unsafe) private var didFlushAfterFailure = false
+
+    nonisolated(unsafe) private var _hasEnqueuedFirstFrame = false
+    nonisolated(unsafe) let activePipLayer: AVSampleBufferDisplayLayer = {
+        let layer = AVSampleBufferDisplayLayer()
+        layer.videoGravity = .resizeAspectFill
+        return layer
+    }()
 
     var onEyesClosedLong: (() -> Void)?
+    var pipController: AVPictureInPictureController?
+
     private let closedThreshold: TimeInterval = 2.5
     private var lastFaceSeen: Date?
 
@@ -26,19 +40,20 @@ final class EyeDetector: NSObject, ObservableObject {
     private var sessionStart: Date?
     private var alertedWhileClosed: Bool = false
 
-    private lazy var faceRequest: VNDetectFaceLandmarksRequest = {
-        VNDetectFaceLandmarksRequest { [weak self] request, _ in
-            guard let self = self else { return }
+    nonisolated(unsafe) private var faceRequest: VNDetectFaceLandmarksRequest?
 
-            if let face = (request.results as? [VNFaceObservation])?.first {
-                self.lastFaceSeen = Date()
+    private func buildFaceRequest() {
+        let request = VNDetectFaceLandmarksRequest { [weak self] req, _ in
+            guard let self else { return }
+            if let face = (req.results as? [VNFaceObservation])?.first {
                 self.processFaceObservation(face)
             } else {
                 self.handleNoFace()
             }
         }
-    }()
-    
+        faceRequest = request
+    }
+
     func start() {
         DispatchQueue.main.async {
             guard !self.isRunning else { return }
@@ -52,11 +67,15 @@ final class EyeDetector: NSObject, ObservableObject {
     }
 
     func stop() {
-        let duration: TimeInterval
-        if let start = sessionStart {
-            duration = Date().timeIntervalSince(start)
-        } else {
-            duration = 0
+        pipController?.stopPictureInPicture()
+        let duration: TimeInterval = sessionStart.map { Date().timeIntervalSince($0) } ?? 0
+        let sessionToStop = session
+        session = nil
+
+        videoQueue.async { [weak self] in
+            sessionToStop?.stopRunning()
+            self?.faceRequest = nil
+            self?._hasEnqueuedFirstFrame = false
         }
 
         DispatchQueue.main.async {
@@ -71,6 +90,7 @@ final class EyeDetector: NSObject, ObservableObject {
             self.isRunning = false
             self.alertedWhileClosed = false
             self.sessionStart = nil
+            self.hasRenderedFirstFrame = false
         }
 
         if let session = session, session.isRunning {
@@ -80,8 +100,8 @@ final class EyeDetector: NSObject, ObservableObject {
     }
     
     func resetTrip() {
-            totalTripDuration = 0
-            lastSessionDuration = 0
+        totalTripDuration = 0
+        lastSessionDuration = 0
     }
 
     func registerAlert() {
@@ -89,24 +109,43 @@ final class EyeDetector: NSObject, ObservableObject {
     }
     
     private func checkPermissionAndStart() {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            setupSessionAndStart()
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                DispatchQueue.main.async {
-                    if granted { self?.setupSessionAndStart() }
+        // Request Camera Permission
+        AVCaptureDevice.requestAccess(for: .video) { [weak self] videoGranted in
+            guard let self = self else { return }
+            
+            if videoGranted {
+                // Request Microphone Permission
+                AVCaptureDevice.requestAccess(for: .audio) { audioGranted in
+                    DispatchQueue.main.async {
+                        if audioGranted {
+                            self.setupSessionAndStart()
+                        } else {
+                            print("⚠️ Audio permission denied. App will try to run, but PiP might freeze in background.")
+                            // We can still try to start, but without audio it might freeze in background
+                            self.setupSessionAndStart()
+                        }
+                    }
                 }
+            } else {
+                print("❌ Camera permission denied.")
             }
-        default:
-            break
         }
     }
 
     private func setupSessionAndStart() {
+        // ✨ ADD THIS: Explicitly activate the background Audio Session first!
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playAndRecord, mode: .videoChat, options: [.mixWithOthers, .allowBluetoothHFP])
+            try audioSession.setActive(true)
+        } catch {
+            print("⚠️ Failed to activate audio session:", error)
+        }
+
         let session = AVCaptureSession()
         session.beginConfiguration()
         session.sessionPreset = .high
+        session.automaticallyConfiguresApplicationAudioSession = false
 
         guard
             let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
@@ -117,11 +156,25 @@ final class EyeDetector: NSObject, ObservableObject {
             return
         }
         session.addInput(input)
+        
+        if let audioDevice = AVCaptureDevice.default(for: .audio),
+            let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+            session.canAddInput(audioInput) {
+            session.addInput(audioInput)
+            let audioOutput = AVCaptureAudioDataOutput()
+            if session.canAddOutput(audioOutput) {
+                session.addOutput(audioOutput)
+            }
+        } else {
+            print("⚠️ Could not add audio input. PiP might freeze in background.")
+        }
 
         let output = AVCaptureVideoDataOutput()
+        
         output.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ]
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+                ]
+        
         output.setSampleBufferDelegate(self, queue: videoQueue)
         output.alwaysDiscardsLateVideoFrames = true
 
@@ -133,8 +186,9 @@ final class EyeDetector: NSObject, ObservableObject {
 
         if let conn = output.connection(with: .video) {
             if #available(iOS 17.0, *) {
-                if conn.isVideoRotationAngleSupported(0) {
-                    conn.videoRotationAngle = 0
+                // ✨ FIX 2: Change 0 to 90. 0 means landscape, 90 means portrait!
+                if conn.isVideoRotationAngleSupported(90) {
+                    conn.videoRotationAngle = 90
                 }
             } else {
                 if conn.isVideoOrientationSupported {
@@ -142,9 +196,17 @@ final class EyeDetector: NSObject, ObservableObject {
                 }
             }
         }
+        
+        if #available(iOS 16.0, *) {
+            if session.isMultitaskingCameraAccessSupported {
+                session.isMultitaskingCameraAccessEnabled = true
+            }
+        }
 
         session.commitConfiguration()
+
         self.session = session
+        buildFaceRequest()
 
         videoQueue.async { [weak self] in
             self?.session?.startRunning()
@@ -154,7 +216,7 @@ final class EyeDetector: NSObject, ObservableObject {
         }
     }
 
-    private func handleNoFace() {
+    nonisolated private func handleNoFace() {
         DispatchQueue.main.async {
             self.eyesOpen = false
             
@@ -173,49 +235,75 @@ final class EyeDetector: NSObject, ObservableObject {
 }
 
 extension EyeDetector: AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(
+    nonisolated func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            return
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        if !_hasEnqueuedFirstFrame {
+            _hasEnqueuedFirstFrame = true
+            DispatchQueue.main.async { self.hasRenderedFirstFrame = true }
         }
 
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored, options: [:])
-        do {
-            try handler.perform([self.faceRequest])
-        } catch {
-            // ignore errors during detection
+        // Tag each frame to display immediately — no timebase scheduling needed
+        if let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
+            let dict = unsafeBitCast(
+                CFArrayGetValueAtIndex(attachments, 0),
+                to: CFMutableDictionary.self
+            )
+            CFDictionarySetValue(
+                dict,
+                Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+            )
         }
+
+        let status: AVQueuedSampleBufferRenderingStatus
+                if #available(iOS 18.0, *) {
+                    status = activePipLayer.sampleBufferRenderer.status
+                } else {
+                    status = activePipLayer.status
+                }
+
+                if status == .failed {
+                    Task { @MainActor in self.flushPiPLayer() }
+                    return
+                }
+
+        if #available(iOS 18.0, *) {
+            activePipLayer.sampleBufferRenderer.enqueue(sampleBuffer)
+        } else {
+            activePipLayer.enqueue(sampleBuffer)
+        }
+
+        guard let faceRequest else { return }
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored, options: [:])
+        try? handler.perform([faceRequest])
     }
 
-    private func processFaceObservation(_ face: VNFaceObservation) {
+    nonisolated private func processFaceObservation(_ face: VNFaceObservation) {
         guard let landmarks = face.landmarks else {
             handleNoFace()
             return
         }
 
-        func openness(for eye: VNFaceLandmarkRegion2D?, boundingBox: CGRect) -> CGFloat? {
+        func openness(for eye: VNFaceLandmarkRegion2D?) -> CGFloat? {
             guard let eye = eye, eye.pointCount > 5 else { return nil }
-            let pts = (0..<eye.pointCount).map { i in
-                eye.normalizedPoints[i]
-            }
-
+            let pts = (0..<eye.pointCount).map { eye.normalizedPoints[$0] }
             let ys = pts.map { $0.y }
             let xs = pts.map { $0.x }
-            guard let minY = ys.min(), let maxY = ys.max(), let minX = xs.min(), let maxX = xs.max() else { return nil }
-
-            let vertical = maxY - minY
+            guard let minY = ys.min(), let maxY = ys.max(),
+                  let minX = xs.min(), let maxX = xs.max() else { return nil }
             let horizontal = maxX - minX
             guard horizontal > 0.0001 else { return nil }
-            return vertical / horizontal
+            return (maxY - minY) / horizontal
         }
 
-        let leftOp = openness(for: landmarks.leftEye, boundingBox: face.boundingBox)
-        let rightOp = openness(for: landmarks.rightEye, boundingBox: face.boundingBox)
-
-        var avgOp: CGFloat? = nil
+        let leftOp = openness(for: landmarks.leftEye)
+        let rightOp = openness(for: landmarks.rightEye)
+        let avgOp: CGFloat?
         if let l = leftOp, let r = rightOp {
             avgOp = (l + r) / 2.0
         } else {
@@ -265,5 +353,13 @@ extension EyeDetector: AVCaptureVideoDataOutputSampleBufferDelegate {
     
     nonisolated private func startCaptureSession(_ session: AVCaptureSession) {
             session.startRunning()
+    }
+    
+    func flushPiPLayer() {
+        if #available(iOS 18.0, *) {
+            activePipLayer.sampleBufferRenderer.flush(removingDisplayedImage: true, completionHandler: nil)
+        } else {
+            activePipLayer.flushAndRemoveImage()
+        }
     }
 }
