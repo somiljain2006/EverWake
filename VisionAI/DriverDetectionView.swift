@@ -18,6 +18,7 @@ struct DriverDetectionView: View {
     @State private var tripAlerts = 0
     @State private var alertPlayer: AVAudioPlayer?
     @State private var dragOffset: CGFloat = 0
+    @State private var isPaused = false
     
     @AppStorage("profileImageData") private var profileImageData: Data?
     @AppStorage("studyAlertSound") private var studyAlertSoundId: String = "bell"
@@ -118,6 +119,7 @@ struct DriverDetectionView: View {
             }
         }
         .onReceive(detector.$closedDuration) { duration in
+            guard !isPaused else { return }
             if duration > 2.5 && !showingAlert {
                 print("🚨 Eyes closed for \(duration)s — TRIGGER ALARM")
                 tripAlerts += 1
@@ -263,17 +265,38 @@ struct DriverDetectionView: View {
 
                 Spacer()
 
-                Button(action: toggleDetection) {
-                    Text(isActiveState ? "Stop Detection" : "Start Detection")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(isActiveState ? Color.red.opacity(0.9) : buttonColor)
-                        .cornerRadius(14)
-                        .shadow(radius: 6)
+                VStack(spacing: 14) {
+
+                    if launchedFromStudy && detector.isRunning && !showingAlert {
+                        Button {
+                            withAnimation {
+                                isPaused ? resumeDetection() : pauseDetection()
+                            }
+                        } label: {
+                            Text(isPaused ? "Resume Detection" : "Pause Detection")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(Color.red.opacity(0.9))
+                                .cornerRadius(14)
+                                .shadow(radius: 6)
+                        }
+                        .padding(.horizontal, 24)
+                    }
+
+                    Button(action: toggleDetection) {
+                        Text(isActiveState ? "Stop Detection" : "Start Detection")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(isActiveState ? Color.red.opacity(0.9) : buttonColor)
+                            .cornerRadius(14)
+                            .shadow(radius: 6)
+                    }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.horizontal, 24)
                 .padding(.bottom, 36)
                 .opacity(showingAlert ? 0 : 1)
             }
@@ -610,5 +633,25 @@ struct DriverDetectionView: View {
         !showAnalytics &&
         !isRestarting &&
         !isBreakActive 
+    }
+    
+    private func pauseDetection() {
+        isPaused = true
+        detector.pauseProcessing()
+        pomodoroTimer.stop()
+    }
+
+    private func resumeDetection() {
+        isPaused = false
+
+        detector.resumeProcessing()
+
+        if detector.session == nil || !(detector.session?.isRunning ?? false) {
+            startDetectorSafe()
+        }
+
+        if pomodoroDuration != nil && pomodoroTimer.remainingSeconds > 0 {
+            pomodoroTimer.start(seconds: pomodoroTimer.remainingSeconds)
+        }
     }
 }

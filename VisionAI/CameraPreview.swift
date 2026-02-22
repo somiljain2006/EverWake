@@ -17,6 +17,7 @@ struct CameraPreview: UIViewRepresentable {
         if uiView.videoPreviewLayer.session != session {
             uiView.videoPreviewLayer.session = session
         }
+        guard let connection = uiView.videoPreviewLayer.connection else { return }
         if let connection = uiView.videoPreviewLayer.connection {
             if #available(iOS 17.0, *) {
                 if connection.isVideoRotationAngleSupported(90) {

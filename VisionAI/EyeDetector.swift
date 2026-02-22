@@ -10,6 +10,7 @@ final class EyeDetector: NSObject, ObservableObject {
     @Published var closedDuration: TimeInterval = 0
     @Published var isStarting: Bool = false
     @Published var totalTripDuration: TimeInterval = 0
+    @Published var isPaused: Bool = false
     
     @Published private(set) var alertsCount: Int = 0
     @Published private(set) var lastSessionDuration: TimeInterval = 0
@@ -155,6 +156,7 @@ final class EyeDetector: NSObject, ObservableObject {
     }
 
     private func handleNoFace() {
+        guard !isPaused else { return }
         DispatchQueue.main.async {
             self.eyesOpen = false
             
@@ -170,6 +172,14 @@ final class EyeDetector: NSObject, ObservableObject {
             }
         }
     }
+    
+    func pauseProcessing() {
+        isPaused = true
+    }
+
+    func resumeProcessing() {
+        isPaused = false
+    }
 }
 
 extension EyeDetector: AVCaptureVideoDataOutputSampleBufferDelegate {
@@ -178,19 +188,20 @@ extension EyeDetector: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            return
-        }
+        guard isRunning, !isPaused else { return }
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored, options: [:])
-        do {
-            try handler.perform([self.faceRequest])
-        } catch {
-            // ignore errors during detection
-        }
+        let handler = VNImageRequestHandler(
+            cvPixelBuffer: pixelBuffer,
+            orientation: .leftMirrored,
+            options: [:]
+        )
+
+        try? handler.perform([self.faceRequest])
     }
 
     private func processFaceObservation(_ face: VNFaceObservation) {
+        guard !isPaused else { return }
         guard let landmarks = face.landmarks else {
             handleNoFace()
             return
