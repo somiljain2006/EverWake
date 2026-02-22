@@ -19,6 +19,7 @@ struct DriverDetectionView: View {
     @State private var alertPlayer: AVAudioPlayer?
     @State private var dragOffset: CGFloat = 0
     @State private var isPaused = false
+    @State private var hasAttemptedAutoStart = false
     
     @AppStorage("profileImageData") private var profileImageData: Data?
     @AppStorage("studyAlertSound") private var studyAlertSoundId: String = "bell"
@@ -44,7 +45,9 @@ struct DriverDetectionView: View {
     }
 
     private var isActiveState: Bool {
-        return detector.isRunning || showingAlert || isRestarting
+        // If we are about to auto-start, treat the view as active so buttons stay hidden
+        let pendingAutoStart = autoStart && !hasAttemptedAutoStart
+        return detector.isRunning || detector.isStarting || pendingAutoStart || showingAlert || isRestarting
     }
 
     var body: some View {
@@ -102,6 +105,15 @@ struct DriverDetectionView: View {
         )
         .onAppear {
             configureAudioSession()
+            if autoStart && !hasAttemptedAutoStart {
+                hasAttemptedAutoStart = true
+                detector.resetTrip()
+                startDetectorSafe()
+                
+                if let duration = pomodoroDuration {
+                    pomodoroTimer.start(seconds: duration)
+                }
+            }
         }
         .navigationBarBackButtonHidden(true)
         .onChange(of: detector.isRunning) { _, newValue in
@@ -142,18 +154,18 @@ struct DriverDetectionView: View {
     
     private var mainDetectionContent: some View {
         ZStack {
-            if detector.isRunning {
+            if detector.isRunning || detector.isStarting || (autoStart && !hasAttemptedAutoStart) {
                 ZStack {
-                    CameraPreview(session: detector.session)
-                        .ignoresSafeArea()
-
-                    if !detector.isRunning {
+                    if detector.isRunning && detector.session != nil {
+                        CameraPreview(session: detector.session)
+                            .ignoresSafeArea()
+                    } else {
                         bgColor
                             .ignoresSafeArea()
                             .overlay(
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.0)
+                                    .scaleEffect(1.2)
                             )
                     }
                 }
@@ -379,7 +391,6 @@ struct DriverDetectionView: View {
     private func handleBreakEnd() {
         playAlertOnce()
 
-        // End break UI
         withAnimation {
             isBreakActive = false
         }
