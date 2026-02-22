@@ -2,23 +2,16 @@ import SwiftUI
 
 struct PomodoroTimerBadge: View {
     let timeText: String
-    let isRunning: Bool
+        let isRunning: Bool
 
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: isRunning ? "timer" : "stopwatch")
-                .font(.system(size: 14, weight: .semibold))
+        var body: some View {
             Text(timeText)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 60, weight: .light, design: .monospaced))
+                .monospacedDigit()
+                .foregroundColor(.white)
+                .shadow(color: Color.black.opacity(0.6), radius: 8, x: 0, y: 2)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 0)
+                .accessibilityLabel(isRunning ? "Timer running \(timeText)" : "Timer \(timeText)")
         }
-        .foregroundColor(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            VisualEffectBlur(blurStyle: .systemMaterialDark)
-                .cornerRadius(12)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08)))
-        .shadow(color: .black.opacity(0.35), radius: 6, x: 0, y: 4)
-    }
 }

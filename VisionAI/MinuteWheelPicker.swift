@@ -81,7 +81,6 @@ struct MinuteWheelPicker: UIViewRepresentable {
             let distance = abs(rowCenterY - pickerCenterY)
             let normalized = min(distance / parent.rowHeight, 1.0)
 
-            // 🎯 FONT SIZING
             let maxFont: CGFloat = 80
             let minFont: CGFloat = 35
             

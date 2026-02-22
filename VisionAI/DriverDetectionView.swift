@@ -160,68 +160,77 @@ struct DriverDetectionView: View {
             }
 
             VStack {
-                HStack {
-                    if detector.isRunning {
-                        if detector.closedDuration <= 2.5 {
-                            Image("eyes-wide")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 90, height: 90)
-                                .padding(.leading, 18)
-                                .shadow(radius: 2)
-                                .transition(.opacity)
-                        }
-                    } else if !isActiveState {
+                HStack(alignment: .top) {
+                    if !isActiveState {
                         Button(action: {
                             stopDetectionAndDismiss()
                         }) {
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundColor(.white)
-                                .padding(.leading, 24)
-                                .padding(.top, 20)
+                                .padding(.leading, 8)
+                                .padding(.top, 8)
                                 .shadow(radius: 2)
                         }
+                    } else {
+                        Color.clear
+                            .frame(width: 44, height: 44)
+                            .padding(.leading, 8)
+                            .padding(.top, 8)
                     }
 
                     Spacer()
 
-                    if !isActiveState || detector.isRunning {
-                        HStack(spacing: 12) {
-                            
-                            if pomodoroDuration != nil {
-                                PomodoroTimerBadge(
-                                    timeText: pomodoroTimer.formattedTime(),
-                                    isRunning: pomodoroTimer.isRunning
-                                )
-                                .padding(.top, 6)
-                                .padding(.trailing, 16)
-                            }
-                            
-                            if !isActiveState {
-                                NavigationLink(
-                                    destination: DriverProfileView(
-                                        showStudyOptions: launchedFromStudy,
-                                        onExit: {
-                                            stopDetectionForProfile()
-                                        }
-                                    )
-                                ) {
-                                    profileImage
-                                        .frame(width: 45, height: 45)
-                                        .background(Color.white.opacity(0.12))
-                                        .clipShape(Circle())
-                                        .shadow(radius: 2)
-                                        .padding(.trailing, 24)
-                                        .padding(.top, 25)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
+                    VStack(spacing: 8) {
+                        if detector.isRunning && detector.closedDuration <= 2.5 {
+                            Image("eyes-wide")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 90, height: 90)
+                                .shadow(radius: 2)
+                                .transition(.opacity)
+                        }
+
+                        if pomodoroDuration != nil {
+                            PomodoroTimerBadge(
+                                timeText: pomodoroTimer.formattedTime(),
+                                isRunning: pomodoroTimer.isRunning
+                            )
+                            .padding(.top, 2)
                         }
                     }
+                    .padding(.top, 12)
+                    .frame(minWidth: 0, maxWidth: .infinity)
+
+                    Spacer()
+
+                    if !isActiveState {
+                        NavigationLink(
+                            destination: DriverProfileView(
+                                showStudyOptions: launchedFromStudy,
+                                onExit: {
+                                    stopDetectionForProfile()
+                                }
+                            )
+                        ) {
+                            profileImage
+                                .frame(width: 45, height: 45)
+                                .background(Color.white.opacity(0.12))
+                                .clipShape(Circle())
+                                .shadow(radius: 2)
+                                .padding(.trailing, 16)
+                                .padding(.top, 8)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    } else {
+                        Color.clear
+                            .frame(width: 45, height: 45)
+                            .padding(.trailing, 16)
+                            .padding(.top, 8)
+                    }
                 }
-                .padding(.top, -10)
-                .offset(y: -5)
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
 
                 Spacer()
 
