@@ -407,6 +407,7 @@ struct DriverDetectionView: View {
     private func stopBreakAndExit() {
         breakTimerObj?.invalidate()
         breakTimerObj = nil
+        stopAlertSound()
         dismiss()
     }
     
@@ -615,9 +616,16 @@ struct DriverDetectionView: View {
 
         do {
             alertPlayer = try AVAudioPlayer(contentsOf: soundURL)
-            alertPlayer?.numberOfLoops = 0    
+            alertPlayer?.numberOfLoops = 0
             alertPlayer?.volume = 1.0
             alertPlayer?.play()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) {
+                if self.alertPlayer?.numberOfLoops == 0 {
+                    self.stopAlertSound()
+                }
+            }
+            
         } catch {
             print("❌ Failed to play one-shot alert sound:", error)
         }
