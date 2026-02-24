@@ -13,7 +13,7 @@ struct DriverProfileView: View {
     @FocusState private var isNameFocused: Bool
 
     @AppStorage("profileImageData") private var profileImageData: Data?
-    @AppStorage("userName") private var userName: String = "Driver"
+    @AppStorage("userName") private var userName: String = "Name"
     @AppStorage("studyAlertSound") private var studyAlertSoundId: String = "bell"
 
     var onExit: (() -> Void)? = nil
@@ -73,7 +73,7 @@ struct DriverProfileView: View {
             }
             .buttonStyle(PlainButtonStyle())
 
-            Text("Driver Profile")
+            Text("Profile")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.leading, 6)

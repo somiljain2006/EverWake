@@ -156,9 +156,15 @@ struct DriverDetectionView: View {
                 }
             }
         }
-        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
-            withAnimation {
-                currentTipIndex = (currentTipIndex + 1) % detectionTips.count
+        .task {
+            while !Task.isCancelled {
+                // Wait for 5 seconds (5 billion nanoseconds)
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                
+                // Animate to the next tip
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    currentTipIndex = (currentTipIndex + 1) % detectionTips.count
+                }
             }
         }
     }
@@ -168,13 +174,16 @@ struct DriverDetectionView: View {
             Image(systemName: "lightbulb.fill")
                 .foregroundColor(.yellow)
             
-            Text(detectionTips[currentTipIndex])
-                .font(.footnote)
-                .foregroundColor(.white.opacity(0.9))
-                .id(currentTipIndex)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            ZStack {
+                Text(detectionTips[currentTipIndex])
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    // The ID forces SwiftUI to see this as a "new" text view, triggering the fade
+                    .id(currentTipIndex)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -310,8 +319,10 @@ struct DriverDetectionView: View {
 
                 VStack(spacing: 14) {
                     
-                    tipBanner
-                        .padding(.bottom, 4)
+                    if !isActiveState {
+                        tipBanner
+                            .padding(.bottom, 4)
+                    }
 
                     if launchedFromStudy && detector.isRunning && !showingAlert {
                         Button {
