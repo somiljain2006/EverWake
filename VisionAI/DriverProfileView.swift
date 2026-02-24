@@ -239,7 +239,7 @@ struct DriverProfileView: View {
 
             VStack(spacing: 20) {
                 HStack {
-                    Text("Report Issue")
+                    Text("Report Issue at")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
 
@@ -253,7 +253,7 @@ struct DriverProfileView: View {
                     }
                 }
 
-                Text("Please report at https://github.com/somiljain2006/VisionAI")
+                Text("https://github.com/somiljain2006/VisionAI")
                     .font(.system(size: 16))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -304,4 +304,3 @@ struct DriverProfileView_Previews: PreviewProvider {
         .previewDevice("iPhone 14 Pro")
     }
 }
-

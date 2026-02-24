@@ -12,7 +12,7 @@ struct SplashView: View {
     @State private var moveEyeToLeft = false
     @State private var textRevealProgress: CGFloat = 0
     
-    let titleText = "VisionAI"
+    let titleText = "EverWake"
 
     private func titleStyle(for char: Character) -> AnyShapeStyle {
         if char == "A" || char == "I" {
@@ -68,7 +68,7 @@ struct SplashView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.black)
                             .opacity(taglineOpacity)
-                            .offset(x: 7, y: taglineOffsetY)
+                            .offset(x: 31, y: taglineOffsetY)
                             .fixedSize(horizontal: true, vertical: false)
                     }
                     .frame(width: moveEyeToLeft ? nil : 0, alignment: .leading)
