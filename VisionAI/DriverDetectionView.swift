@@ -20,12 +20,13 @@ struct DriverDetectionView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var isPaused = false
     @State private var hasAttemptedAutoStart = false
+    @State private var currentTipIndex = 0
     
     @AppStorage("profileImageData") private var profileImageData: Data?
     @AppStorage("studyAlertSound") private var studyAlertSoundId: String = "bell"
 
     private let bgColor = Color(hex: "#2D3135")
-    private let buttonColor = Color(hex: "#49494A")
+    private let buttonColor = Color(hex: "6C63FF")
     private let accentColor = Color(hex: "#8B8CFB")
     
     let launchedFromStudy: Bool
@@ -43,9 +44,14 @@ struct DriverDetectionView: View {
         self.breakDuration = breakDuration
         self.launchedFromStudy = launchedFromStudy
     }
+    
+    private let detectionTips = [
+        "Don't wear reflective glasses for best results",
+        "Ensure your face is well-lit for accurate tracking",
+        "Place your device around eye level for best results"
+    ]
 
     private var isActiveState: Bool {
-        // If we are about to auto-start, treat the view as active so buttons stay hidden
         let pendingAutoStart = autoStart && !hasAttemptedAutoStart
         return detector.isRunning || detector.isStarting || pendingAutoStart || showingAlert || isRestarting
     }
@@ -150,6 +156,31 @@ struct DriverDetectionView: View {
                 }
             }
         }
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+            withAnimation {
+                currentTipIndex = (currentTipIndex + 1) % detectionTips.count
+            }
+        }
+    }
+    
+    private var tipBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "lightbulb.fill")
+                .foregroundColor(.yellow)
+            
+            Text(detectionTips[currentTipIndex])
+                .font(.footnote)
+                .foregroundColor(.white.opacity(0.9))
+                .id(currentTipIndex)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.6))
+        .cornerRadius(20)
+        .animation(.easeInOut(duration: 0.5), value: currentTipIndex)
     }
     
     private var mainDetectionContent: some View {
@@ -278,6 +309,9 @@ struct DriverDetectionView: View {
                 Spacer()
 
                 VStack(spacing: 14) {
+                    
+                    tipBanner
+                        .padding(.bottom, 4)
 
                     if launchedFromStudy && detector.isRunning && !showingAlert {
                         Button {
