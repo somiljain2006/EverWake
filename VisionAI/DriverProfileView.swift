@@ -282,7 +282,7 @@ struct DriverProfileView: View {
     
     private var shareItems: [Any] {
         let message = "Check out VisionAI – Stay awake, stay focused"
-        let appLink = URL(string: "https://github.com/somiljain2006/VisionAI")!
+        let appLink = URL(string: "https://github.com/somiljain2006/EverWake")!
         return [message, appLink]
     }
     
