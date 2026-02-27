@@ -41,7 +41,7 @@ struct CameraPermissionView: View {
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
 
-                Text("VisionAI uses your camera to detect eye\nclosure and body movements.")
+                Text("EverWake uses your camera to detect eye\nclosure and body movements.")
                     .font(.system(size: 17))
                     .foregroundColor(headingColor)
                     .multilineTextAlignment(.center)
